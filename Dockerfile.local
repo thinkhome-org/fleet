@@ -1,0 +1,23 @@
+FROM node:24.10.0-bookworm-slim AS frontend
+WORKDIR /src
+COPY package.json yarn.lock .npmrc .yarnrc ./
+RUN yarn install --frozen-lockfile --network-timeout 600000
+COPY . .
+RUN NODE_OPTIONS=--max-old-space-size=2048 NODE_ENV=production yarn run webpack --progress
+
+FROM golang:1.26.5-trixie AS builder
+RUN apt-get update && apt-get install -y --no-install-recommends musl-tools && rm -rf /var/lib/apt/lists/*
+WORKDIR /src
+COPY . .
+COPY --from=frontend /src/assets /src/assets
+RUN go run github.com/kevinburke/go-bindata/go-bindata -pkg=bindata -tags full -o=server/bindata/generated.go frontend/templates/ assets/... server/mail/templates
+ARG FLEET_VERSION=local
+ARG FLEET_REVISION=unknown
+RUN CC=musl-gcc CGO_ENABLED=1 GOMAXPROCS=2 go build -tags full,fts5,netgo -trimpath -o /fleet -ldflags "-s -w -extldflags '-static' -X github.com/fleetdm/fleet/v4/server/version.version=${FLEET_VERSION} -X github.com/fleetdm/fleet/v4/server/version.revision=${FLEET_REVISION}" ./cmd/fleet
+
+FROM alpine:3.23.4
+RUN apk --no-cache add ca-certificates jq && apk --no-cache upgrade openssl libcrypto3 libssl3
+RUN addgroup -S fleet && adduser -S fleet -G fleet
+COPY --from=builder /fleet /usr/bin/fleet
+USER fleet
+CMD ["fleet", "serve"]

@@ -1,0 +1,4 @@
+fleet.thinkhome.org {
+	encode zstd gzip
+	reverse_proxy fleet:1337
+}
