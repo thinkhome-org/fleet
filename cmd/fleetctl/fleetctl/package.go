@@ -123,6 +123,7 @@ func packageCommand() *cli.Command {
 			&cli.BoolFlag{
 				Name:        "disable-updates",
 				Usage:       "Disable auto updates on the generated package",
+				Value:       true,
 				Destination: &opt.DisableUpdates,
 			},
 			&cli.BoolFlag{

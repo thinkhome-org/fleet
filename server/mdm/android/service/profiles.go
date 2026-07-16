@@ -22,13 +22,13 @@ import (
 	"google.golang.org/api/androidmanagement/v1"
 )
 
-func ReconcileProfiles(ctx context.Context, ds fleet.Datastore, logger *slog.Logger, licenseKey string, androidAgentConfig config.AndroidAgentConfig, batchSize int) error {
-	return ReconcileProfilesWithClient(ctx, ds, logger, licenseKey, nil, androidAgentConfig, batchSize)
+func ReconcileProfiles(ctx context.Context, ds fleet.Datastore, logger *slog.Logger, androidServiceCredentials string, androidAgentConfig config.AndroidAgentConfig, batchSize int) error {
+	return ReconcileProfilesWithClient(ctx, ds, logger, androidServiceCredentials, nil, androidAgentConfig, batchSize)
 }
 
 // ReconcileProfilesWithClient is like ReconcileProfiles but allows injecting a custom client for testing.
 // If client is nil, a new AMAPI client will be created.
-func ReconcileProfilesWithClient(ctx context.Context, ds fleet.Datastore, logger *slog.Logger, licenseKey string, client androidmgmt.Client, androidAgentConfig config.AndroidAgentConfig, batchSize int) (err error) {
+func ReconcileProfilesWithClient(ctx context.Context, ds fleet.Datastore, logger *slog.Logger, androidServiceCredentials string, client androidmgmt.Client, androidAgentConfig config.AndroidAgentConfig, batchSize int) (err error) {
 	appConfig, err := ds.AppConfig(ctx)
 	if err != nil {
 		return ctxerr.Wrap(ctx, err, "get app config")
@@ -46,7 +46,10 @@ func ReconcileProfilesWithClient(ctx context.Context, ds fleet.Datastore, logger
 	}
 
 	if client == nil {
-		client = newAMAPIClient(ctx, logger, licenseKey)
+		client = newAMAPIClient(ctx, logger, androidServiceCredentials)
+		if client == nil {
+			return errors.New("android Management API client is not configured")
+		}
 		authSecret, err := getClientAuthenticationSecret(ctx, ds)
 		if err != nil {
 			return ctxerr.Wrap(ctx, err, "getting Android client authentication secret for profile reconciler")

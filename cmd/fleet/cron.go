@@ -1941,7 +1941,7 @@ func newAndroidMDMProfileManagerSchedule(
 	instanceID string,
 	ds fleet.Datastore,
 	logger *slog.Logger,
-	licenseKey string,
+	androidServiceCredentials string,
 	androidAgentConfig config.AndroidAgentConfig,
 	batchSize int,
 ) (*schedule.Schedule, error) {
@@ -1955,7 +1955,7 @@ func newAndroidMDMProfileManagerSchedule(
 		ctx, name, instanceID, defaultInterval, ds, ds,
 		schedule.WithLogger(logger),
 		schedule.WithJob("manage_android_profiles", func(ctx context.Context) error {
-			return android_svc.ReconcileProfiles(ctx, ds, logger, licenseKey, androidAgentConfig, batchSize)
+			return android_svc.ReconcileProfiles(ctx, ds, logger, androidServiceCredentials, androidAgentConfig, batchSize)
 		}),
 	)
 
@@ -2411,7 +2411,7 @@ func newAndroidMDMDeviceReconcilerSchedule(
 	instanceID string,
 	ds fleet.Datastore,
 	logger *slog.Logger,
-	licenseKey string,
+	androidServiceCredentials string,
 	newActivityFn fleet.NewActivityFunc,
 ) (*schedule.Schedule, error) {
 	const (
@@ -2424,7 +2424,7 @@ func newAndroidMDMDeviceReconcilerSchedule(
 		ctx, name, instanceID, defaultInterval, ds, ds,
 		schedule.WithLogger(logger),
 		schedule.WithJob("reconcile_android_devices", func(ctx context.Context) error {
-			return android_svc.ReconcileAndroidDevices(ctx, ds, logger, licenseKey, newActivityFn)
+			return android_svc.ReconcileAndroidDevices(ctx, ds, logger, androidServiceCredentials, newActivityFn)
 		}),
 	)
 

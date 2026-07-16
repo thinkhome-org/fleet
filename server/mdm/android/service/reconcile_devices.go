@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -12,7 +13,7 @@ import (
 // ReconcileAndroidDevices polls AMAPI for devices that Fleet still considers enrolled
 // and flips them to unenrolled if Google reports them missing (404).
 // This complements (does not replace) Pub/Sub DELETED handling.
-func ReconcileAndroidDevices(ctx context.Context, ds fleet.Datastore, logger *slog.Logger, licenseKey string, newActivityFn fleet.NewActivityFunc) error {
+func ReconcileAndroidDevices(ctx context.Context, ds fleet.Datastore, logger *slog.Logger, androidServiceCredentials string, newActivityFn fleet.NewActivityFunc) error {
 	appConfig, err := ds.AppConfig(ctx)
 	if err != nil {
 		return ctxerr.Wrap(ctx, err, "get app config")
@@ -27,7 +28,10 @@ func ReconcileAndroidDevices(ctx context.Context, ds fleet.Datastore, logger *sl
 		return ctxerr.Wrap(ctx, err, "get android enterprise")
 	}
 
-	client := newAMAPIClient(ctx, logger, licenseKey)
+	client := newAMAPIClient(ctx, logger, androidServiceCredentials)
+	if client == nil {
+		return errors.New("android Management API client is not configured")
+	}
 
 	// Best-effort set authentication secret for proxy client usage (no-op for Google client).
 	if assets, err := ds.GetAllMDMConfigAssetsByName(ctx, []fleet.MDMAssetName{fleet.MDMAssetAndroidFleetServerSecret}, nil); err == nil {

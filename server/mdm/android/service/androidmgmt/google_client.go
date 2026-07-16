@@ -56,6 +56,10 @@ func NewGoogleClient(ctx context.Context, logger *slog.Logger, getenv dev_mode.G
 			logger.ErrorContext(ctx, "unmarshaling android service credentials", "err", err)
 			return nil
 		}
+		if creds.ProjectID == "" {
+			logger.ErrorContext(ctx, "android service credentials are missing project_id")
+			return nil
+		}
 		opts = append(opts, option.WithCredentialsJSON([]byte(androidServiceCredentials)))
 	}
 	opts = append(opts, option.WithLogger(logger))

@@ -164,6 +164,7 @@ func main() {
 		&cli.BoolFlag{
 			Name:    "disable-updates",
 			Usage:   "Disables auto updates",
+			Value:   true,
 			EnvVars: []string{"ORBIT_DISABLE_UPDATES"},
 		},
 		&cli.BoolFlag{

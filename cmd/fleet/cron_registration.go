@@ -244,7 +244,7 @@ func registerMDMCrons(ctx context.Context, deps cronSchedulesDeps) {
 			deps.instanceID,
 			deps.ds,
 			deps.logger,
-			deps.config.License.Key, // NOTE: this requires the license key, not the parsed *LicenseInfo available in the ctx
+			deps.config.MDM.AndroidGoogleServiceCredentials,
 			deps.config.MDM.AndroidAgent,
 			deps.config.MDM.AndroidBatchSize,
 		)
@@ -257,7 +257,7 @@ func registerMDMCrons(ctx context.Context, deps cronSchedulesDeps) {
 			deps.instanceID,
 			deps.ds,
 			deps.logger,
-			deps.config.License.Key,
+			deps.config.MDM.AndroidGoogleServiceCredentials,
 			deps.svc.NewActivity,
 		)
 	})
