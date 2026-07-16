@@ -250,6 +250,14 @@ type AppConfig struct {
 	EnableScheduledQueryStats bool          `yaml:"enable_scheduled_query_stats"`
 }
 
+// AIConfig configures an OpenAI-compatible API used by AI features.
+type AIConfig struct {
+	BaseURL           string `yaml:"base_url"`
+	APIKey            string `yaml:"api_key"`
+	Model             string `yaml:"model"`
+	AllowInsecureHTTP bool   `yaml:"allow_insecure_http"`
+}
+
 // SessionConfig defines configs related to user sessions
 type SessionConfig struct {
 	KeySize  int `yaml:"key_size"`
@@ -794,6 +802,7 @@ type FleetConfig struct {
 	Server                     ServerConfig
 	Auth                       AuthConfig
 	App                        AppConfig
+	AI                         AIConfig
 	Session                    SessionConfig
 	Osquery                    OsqueryConfig
 	Activity                   ActivityConfig
@@ -959,6 +968,8 @@ type MDMConfig struct {
 
 	AndroidAgent     AndroidAgentConfig `yaml:"android_agent"`
 	AndroidBatchSize int                `yaml:"android_batch_size"`
+	// AndroidGoogleServiceCredentials contains the Google service account JSON used for direct Android Management API calls.
+	AndroidGoogleServiceCredentials string `yaml:"android_google_service_credentials"`
 }
 
 // IsCustomDiskEncryptionEnabled reports whether custom disk encryption configuration profiles are allowed. Any of the equivalent
@@ -1447,6 +1458,12 @@ func (man Manager) addConfigs() {
 	man.addConfigBool("app.enable_scheduled_query_stats", true,
 		"If true (default) it gets scheduled query stats from hosts")
 
+	// AI
+	man.addConfigString("ai.base_url", "", "Base URL of an OpenAI-compatible API")
+	man.addConfigString("ai.api_key", "", "API key for the OpenAI-compatible API (optional)")
+	man.addConfigString("ai.model", "", "Model used by Fleet AI features")
+	man.addConfigBool("ai.allow_insecure_http", false, "Allow plaintext HTTP for a trusted local AI endpoint")
+
 	// Session
 	man.addConfigInt("session.key_size", 64,
 		"Size of generated session keys")
@@ -1819,6 +1836,7 @@ func (man Manager) addConfigs() {
 	man.hideConfig("mdm.android_agent.signing_sha256")
 	man.addConfigInt("mdm.android_batch_size", 100, "Maximum number of hosts per batch for Android MDM API operations (100 default; 0 = no limit)")
 	man.hideConfig("mdm.android_batch_size")
+	man.addConfigString("mdm.android_google_service_credentials", "", "Google service account JSON used for direct Android Management API calls")
 
 	// Calendar integration
 	man.addConfigDuration(
@@ -1947,6 +1965,12 @@ func (man Manager) LoadConfig() FleetConfig {
 			TokenKeySize:              man.getConfigInt("app.token_key_size"),
 			InviteTokenValidityPeriod: man.getConfigDuration("app.invite_token_validity_period"),
 			EnableScheduledQueryStats: man.getConfigBool("app.enable_scheduled_query_stats"),
+		},
+		AI: AIConfig{
+			BaseURL:           man.getConfigString("ai.base_url"),
+			APIKey:            man.getConfigString("ai.api_key"),
+			Model:             man.getConfigString("ai.model"),
+			AllowInsecureHTTP: man.getConfigBool("ai.allow_insecure_http"),
 		},
 		Session: SessionConfig{
 			KeySize:  man.getConfigInt("session.key_size"),
@@ -2163,7 +2187,8 @@ func (man Manager) LoadConfig() FleetConfig {
 				Package:       man.getConfigString("mdm.android_agent.package"),
 				SigningSHA256: man.getConfigString("mdm.android_agent.signing_sha256"),
 			},
-			AndroidBatchSize: man.getConfigInt("mdm.android_batch_size"),
+			AndroidBatchSize:                man.getConfigInt("mdm.android_batch_size"),
+			AndroidGoogleServiceCredentials: man.getConfigString("mdm.android_google_service_credentials"),
 		},
 		Calendar: CalendarConfig{
 			Periodicity: man.getConfigDuration("calendar.periodicity"),

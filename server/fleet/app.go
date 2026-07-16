@@ -1185,8 +1185,6 @@ type VulnerabilitiesWebhookSettings struct {
 }
 
 func (c *AppConfig) ApplyDefaultsForNewInstalls() {
-	c.ServerSettings.EnableAnalytics = true
-
 	// Add default values for SMTPSettings.
 	var smtpSettings SMTPSettings
 	smtpSettings.SMTPEnabled = false

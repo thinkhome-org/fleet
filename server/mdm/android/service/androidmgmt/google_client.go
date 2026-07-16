@@ -2,6 +2,7 @@ package androidmgmt
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -21,8 +22,7 @@ import (
 	"google.golang.org/api/option"
 )
 
-// GoogleClient connects directly to Google's Android Management API. It is intended to be used for development/debugging.
-// To enable, set the following env vars: FLEET_DEV_ANDROID_GOOGLE_CLIENT=1 and FLEET_DEV_ANDROID_GOOGLE_SERVICE_CREDENTIALS=$(cat credentials.json)
+// GoogleClient connects directly to Google's Android Management API.
 type GoogleClient struct {
 	logger                    *slog.Logger
 	mgmt                      *androidmanagement.Service
@@ -33,27 +33,33 @@ type GoogleClient struct {
 // Compile-time check to ensure that ProxyClient implements Client.
 var _ Client = &GoogleClient{}
 
+var errGoogleCredentialsRequired = errors.New("mdm.android_google_service_credentials is required")
+
+type errorTransport struct{}
+
+func (errorTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, errGoogleCredentialsRequired
+}
+
 func NewGoogleClient(ctx context.Context, logger *slog.Logger, getenv dev_mode.GetEnv) Client {
 	androidServiceCredentials := getenv("FLEET_DEV_ANDROID_GOOGLE_SERVICE_CREDENTIALS")
-	if androidServiceCredentials == "" {
-		return nil
-	}
-
 	type credentials struct {
 		ProjectID string `json:"project_id"`
 	}
 
 	var creds credentials
-	err := json.Unmarshal([]byte(androidServiceCredentials), &creds)
-	if err != nil {
-		logger.ErrorContext(ctx, "unmarshaling android service credentials", "err", err)
-		return nil
+	var opts []option.ClientOption
+	if androidServiceCredentials == "" {
+		opts = append(opts, option.WithHTTPClient(&http.Client{Transport: errorTransport{}}))
+	} else {
+		if err := json.Unmarshal([]byte(androidServiceCredentials), &creds); err != nil {
+			logger.ErrorContext(ctx, "unmarshaling android service credentials", "err", err)
+			return nil
+		}
+		opts = append(opts, option.WithCredentialsJSON([]byte(androidServiceCredentials)))
 	}
-
-	mgmt, err := androidmanagement.NewService(ctx,
-		option.WithCredentialsJSON([]byte(androidServiceCredentials)),
-		option.WithLogger(logger),
-	)
+	opts = append(opts, option.WithLogger(logger))
+	mgmt, err := androidmanagement.NewService(ctx, opts...)
 	if err != nil {
 		logger.ErrorContext(ctx, "creating android management service", "err", err)
 		return nil
@@ -107,6 +113,9 @@ func (g *GoogleClient) EnterprisesCreate(ctx context.Context, req EnterprisesCre
 
 // createPubSub creates the PubSub topic and subscription
 func (g *GoogleClient) createPubSub(ctx context.Context, pushURL string) (string, error) {
+	if g.androidServiceCredentials == "" {
+		return "", errGoogleCredentialsRequired
+	}
 	pubSubClient, err := pubsub.NewClient(ctx, g.androidProjectID, option.WithCredentialsJSON([]byte(g.androidServiceCredentials)))
 	if err != nil {
 		return "", fmt.Errorf("creating PubSub client: %w", err)

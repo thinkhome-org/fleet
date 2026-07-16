@@ -14,6 +14,7 @@ import (
 	"github.com/fleetdm/fleet/v4/server/fleet"
 	"github.com/fleetdm/fleet/v4/server/mdm/android"
 	android_mock "github.com/fleetdm/fleet/v4/server/mdm/android/mock"
+	"github.com/fleetdm/fleet/v4/server/mdm/android/service/androidmgmt"
 	ds_mock "github.com/fleetdm/fleet/v4/server/mock"
 	"github.com/fleetdm/fleet/v4/server/ptr"
 	"github.com/jmoiron/sqlx"
@@ -22,6 +23,13 @@ import (
 	"google.golang.org/api/androidmanagement/v1"
 	"google.golang.org/api/googleapi"
 )
+
+func TestNewAMAPIClientUsesGoogleDirectly(t *testing.T) {
+	client := newAMAPIClient(context.Background(), slog.Default(), "")
+	require.IsType(t, &androidmgmt.GoogleClient{}, client)
+	_, err := client.SignupURLsCreate(context.Background(), "", "https://example.com/callback")
+	require.ErrorContains(t, err, "mdm.android_google_service_credentials is required")
+}
 
 func TestEnterprisesAuth(t *testing.T) {
 	androidAPIClient := android_mock.Client{}

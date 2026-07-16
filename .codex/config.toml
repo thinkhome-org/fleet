@@ -1,0 +1,6 @@
+[shell_environment_policy]
+inherit = "core"
+
+[shell_environment_policy.set]
+MYSQL_TEST = "1"
+REDIS_TEST = "1"

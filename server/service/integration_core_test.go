@@ -14805,7 +14805,7 @@ func (s *integrationTestSuite) TestAutofillPolicies() {
 							w.WriteHeader(http.StatusBadRequest)
 							return
 						}
-						_, _ = w.Write([]byte(`{"risks":"description", "whatWillProbablyHappenDuringMaintenance":"resolution"}`))
+						_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"{\"risks\":\"description\",\"whatWillProbablyHappenDuringMaintenance\":\"resolution\"}"}}]}`))
 					case "/error":
 						w.WriteHeader(http.StatusTeapot)
 						_, _ = w.Write([]byte(`{}`))
@@ -14813,7 +14813,7 @@ func (s *integrationTestSuite) TestAutofillPolicies() {
 						_, _ = w.Write([]byte(`{bad json}`))
 					case "/timeout":
 						time.Sleep(2 * time.Second)
-						_, _ = w.Write([]byte(`{"risks":"description", "whatWillProbablyHappenDuringMaintenance":"resolution"}`))
+						_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"{\"risks\":\"description\",\"whatWillProbablyHappenDuringMaintenance\":\"resolution\"}"}}]}`))
 					default:
 						w.WriteHeader(http.StatusNotFound)
 					}

@@ -1495,12 +1495,21 @@ func TestInitLicense(t *testing.T) {
 		assert.NotEmpty(t, cfg.License.Key, "dev expired license should populate the config key")
 	})
 
+	t.Run("dev license takes precedence", func(t *testing.T) {
+		cfg := &config.FleetConfig{}
+		license, err := initLicense(cfg, true, true)
+		require.NoError(t, err)
+		require.NotNil(t, license)
+		assert.False(t, license.IsExpired())
+	})
+
 	t.Run("no license key", func(t *testing.T) {
 		cfg := &config.FleetConfig{}
 		license, err := initLicense(cfg, false, false)
 		require.NoError(t, err)
 		require.NotNil(t, license)
-		assert.Equal(t, fleet.TierFree, license.Tier)
+		assert.Equal(t, fleet.TierPremium, license.Tier)
+		assert.False(t, license.IsExpired())
 		assert.Empty(t, cfg.License.Key)
 	})
 }

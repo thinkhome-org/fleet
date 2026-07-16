@@ -2,15 +2,60 @@ package service
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	activity_api "github.com/fleetdm/fleet/v4/server/activity/api"
+	"github.com/fleetdm/fleet/v4/server/config"
 	"github.com/fleetdm/fleet/v4/server/contexts/viewer"
 	"github.com/fleetdm/fleet/v4/server/fleet"
 	"github.com/fleetdm/fleet/v4/server/mock"
 	"github.com/fleetdm/fleet/v4/server/ptr"
 	"github.com/stretchr/testify/require"
 )
+
+func TestAutofillPolicySqlOpenAICompatible(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/v1/chat/completions", r.URL.Path)
+		require.Equal(t, "Bearer test-key", r.Header.Get("Authorization"))
+		var body struct {
+			Model    string              `json:"model"`
+			Messages []map[string]string `json:"messages"`
+		}
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		require.Equal(t, "local-model", body.Model)
+		require.Equal(t, "select 1", body.Messages[1]["content"])
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"{\"risks\":\"description\",\"whatWillProbablyHappenDuringMaintenance\":\"resolution\"}"}}]}`))
+	}))
+	t.Cleanup(server.Close)
+
+	ds := new(mock.Store)
+	ds.AppConfigFunc = func(context.Context) (*fleet.AppConfig, error) { return &fleet.AppConfig{}, nil }
+	cfg := config.TestConfig()
+	cfg.AI = config.AIConfig{
+		BaseURL: server.URL + "/v1", APIKey: "test-key", Model: "local-model", AllowInsecureHTTP: true,
+	}
+	svc, ctx := newTestServiceWithConfig(t, ds, cfg, nil, nil)
+	ctx = viewer.NewContext(ctx, viewer.Viewer{User: &fleet.User{GlobalRole: ptr.String(fleet.RoleAdmin)}})
+
+	description, resolution, err := svc.AutofillPolicySql(ctx, " select 1 ")
+	require.NoError(t, err)
+	require.Equal(t, "description", description)
+	require.Equal(t, "resolution", resolution)
+}
+
+func TestParseAutofillCompletion(t *testing.T) {
+	result, err := parseAutofillCompletion([]byte(`{"choices":[{"message":{"content":"Here is the result:\n` +
+		`{\"risks\":\"description\",\"whatWillProbablyHappenDuringMaintenance\":\"resolution\"}"}}]}`))
+	require.NoError(t, err)
+	require.Equal(t, "description", result["risks"])
+	require.Equal(t, "resolution", result["whatWillProbablyHappenDuringMaintenance"])
+
+	_, err = parseAutofillCompletion([]byte(`{"choices":[]}`))
+	require.Error(t, err)
+}
 
 func TestCheckPolicySpecAuthorization(t *testing.T) {
 	t.Run("when team not found", func(t *testing.T) {

@@ -8,11 +8,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"slices"
 	"strings"
 	"time"
 
-	"github.com/fleetdm/fleet/v4/pkg/fleethttp"
 	"github.com/fleetdm/fleet/v4/server/authz"
 	"github.com/fleetdm/fleet/v4/server/contexts/ctxerr"
 	"github.com/fleetdm/fleet/v4/server/contexts/license"
@@ -562,9 +562,9 @@ func autofillPoliciesEndpoint(ctx context.Context, request interface{}, svc flee
 	return fleet.AutofillPoliciesResponse{Description: description, Resolution: resolution, Err: err}, nil
 }
 
-// Exposing external URL and timeout for testing purposes
+// Exposing URL and timeout for testing purposes.
 var (
-	getHumanInterpretationFromOsquerySqlUrl     = "https://fleetdm.com/api/v1/get-human-interpretation-from-osquery-sql"
+	getHumanInterpretationFromOsquerySqlUrl     string
 	getHumanInterpretationFromOsquerySqlTimeout = 30 * time.Second
 )
 
@@ -636,10 +636,54 @@ func (svc *Service) AutofillPolicySql(ctx context.Context, sql string) (descript
 		return "", "", ctxerr.Wrap(ctx, &fleet.BadRequestError{Message: "'sql' cannot be empty"})
 	}
 
-	// Using a timeout smaller than the Fleet server's WriteTimeout
-	client := fleethttp.NewClient(fleethttp.WithTimeout(getHumanInterpretationFromOsquerySqlTimeout))
-	reqBodyValues := map[string]string{"sql": sql}
-	reqBody, err := json.Marshal(reqBodyValues)
+	endpoint := getHumanInterpretationFromOsquerySqlUrl
+	model := svc.config.AI.Model
+	if endpoint == "" {
+		if svc.config.AI.BaseURL == "" || model == "" {
+			return "", "", ctxerr.Wrap(ctx, &fleet.BadRequestError{
+				Message: "AI is not configured (ai.base_url and ai.model are required)",
+			})
+		}
+		endpoint = strings.TrimRight(svc.config.AI.BaseURL, "/")
+		if !strings.HasSuffix(endpoint, "/chat/completions") {
+			endpoint += "/chat/completions"
+		}
+	} else if model == "" {
+		model = "test"
+	}
+	endpointURL, err := url.Parse(endpoint)
+	if err != nil || endpointURL.Host == "" || (endpointURL.Scheme != "https" && endpointURL.Scheme != "http") {
+		return "", "", ctxerr.Wrap(ctx, &fleet.BadRequestError{Message: "ai.base_url must be a valid HTTP(S) URL"})
+	}
+	if endpointURL.Scheme == "http" && !svc.config.AI.AllowInsecureHTTP && getHumanInterpretationFromOsquerySqlUrl == "" {
+		return "", "", ctxerr.Wrap(ctx, &fleet.BadRequestError{
+			Message: "ai.base_url must use HTTPS unless ai.allow_insecure_http is enabled",
+		})
+	}
+
+	request := struct {
+		Model    string              `json:"model"`
+		Messages []map[string]string `json:"messages"`
+	}{
+		Model: model,
+		Messages: []map[string]string{
+			{
+				"role": "system",
+				"content": "Explain osquery policy SQL. Return only a JSON object with string fields " +
+					"risks and whatWillProbablyHappenDuringMaintenance.",
+			},
+			{"role": "user", "content": sql},
+		},
+	}
+
+	// Use a timeout smaller than the Fleet server's WriteTimeout.
+	client := &http.Client{
+		Timeout: getHumanInterpretationFromOsquerySqlTimeout,
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	reqBody, err := json.Marshal(request)
 	if err != nil {
 		return "", "", ctxerr.Wrap(
 			ctx, &fleet.BadRequestError{
@@ -647,9 +691,18 @@ func (svc *Service) AutofillPolicySql(ctx context.Context, sql string) (descript
 			},
 		)
 	}
-	resp, err := client.Post(
-		getHumanInterpretationFromOsquerySqlUrl, "application/json", bytes.NewBuffer(reqBody),
-	)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(reqBody))
+	if err != nil {
+		return "", "", ctxerr.Wrap(ctx, AutofillError{
+			Message:     "error creating request to get human interpretation from osquery sql",
+			InternalErr: err,
+		})
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if svc.config.AI.APIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+svc.config.AI.APIKey)
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", "", ctxerr.Wrap(
 			ctx, AutofillError{
@@ -664,12 +717,12 @@ func (svc *Service) AutofillPolicySql(ctx context.Context, sql string) (descript
 			ctx, AutofillError{
 				Message: "error from human interpretation of osquery sql",
 				InternalErr: fmt.Errorf(
-					"%s returned %d status code", getHumanInterpretationFromOsquerySqlUrl, resp.StatusCode,
+					"%s returned %d status code", endpoint, resp.StatusCode,
 				),
 			},
 		)
 	}
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20+1))
 	if err != nil {
 		return "", "", ctxerr.Wrap(
 			ctx, AutofillError{
@@ -678,9 +731,14 @@ func (svc *Service) AutofillPolicySql(ctx context.Context, sql string) (descript
 			},
 		)
 	}
+	if len(body) > 1<<20 {
+		return "", "", ctxerr.Wrap(ctx, AutofillError{
+			Message:     "error reading response body from human interpretation of osquery sql",
+			InternalErr: errors.New("response body exceeds 1 MiB"),
+		})
+	}
 
-	var result map[string]string
-	err = json.Unmarshal(body, &result)
+	result, err := parseAutofillCompletion(body)
 	if err != nil {
 		return "", "", ctxerr.Wrap(
 			ctx, AutofillError{
@@ -699,4 +757,32 @@ func (svc *Service) AutofillPolicySql(ctx context.Context, sql string) (descript
 		resolutionTrimmed = resolutionTrimmed[:maxLength]
 	}
 	return descriptionTrimmed, resolutionTrimmed, nil
+}
+
+func parseAutofillCompletion(body []byte) (map[string]string, error) {
+	var completion struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+	err := json.Unmarshal(body, &completion)
+	if err == nil && len(completion.Choices) == 0 {
+		err = errors.New("response has no choices")
+	}
+	var result map[string]string
+	if err == nil {
+		content := completion.Choices[0].Message.Content
+		start, end := strings.IndexByte(content, '{'), strings.LastIndexByte(content, '}')
+		if start < 0 || end < start {
+			err = errors.New("response content is not a JSON object")
+		} else {
+			err = json.Unmarshal([]byte(content[start:end+1]), &result)
+		}
+	}
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
 }

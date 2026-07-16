@@ -460,7 +460,7 @@ func runServeCmd(cmd *cobra.Command, configManager configpkg.Manager, debug, dev
 		ctx,
 		logger,
 		ds,
-		config.License.Key,
+		config.MDM.AndroidGoogleServiceCredentials,
 		config.Server.PrivateKey,
 		ds,
 		func(ctx context.Context, user *fleet.User, activity fleet.ActivityDetails) error {
@@ -1207,7 +1207,11 @@ func initLicense(config *configpkg.FleetConfig, devLicense, devExpiredLicense bo
 		// An expired license key
 		config.License.Key = "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJGbGVldCBEZXZpY2UgTWFuYWdlbWVudCBJbmMuIiwiZXhwIjoxNjI5NzYzMjAwLCJzdWIiOiJEZXYgbGljZW5zZSAoZXhwaXJlZCkiLCJkZXZpY2VzIjo1MDAwMDAsIm5vdGUiOiJUaGlzIGxpY2Vuc2UgaXMgdXNlZCB0byBmb3IgZGV2ZWxvcG1lbnQgcHVycG9zZXMuIiwidGllciI6ImJhc2ljIiwiaWF0IjoxNjI5OTA0NzMyfQ.AOppRkl1Mlc_dYKH9zwRqaTcL0_bQzs7RM3WSmxd3PeCH9CxJREfXma8gm0Iand6uIWw8gHq5Dn0Ivtv80xKvQ"
 	}
-	return licensing.LoadLicense(config.License.Key)
+	license, err := licensing.LoadLicense(config.License.Key)
+	if err == nil && !devLicense && devExpiredLicense {
+		license.Expiration = time.Unix(0, 0)
+	}
+	return license, err
 }
 
 // basicAuthHandler wraps the given handler behind HTTP Basic Auth.

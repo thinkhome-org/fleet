@@ -60,13 +60,13 @@ func NewService(
 	ctx context.Context,
 	logger *slog.Logger,
 	ds fleet.AndroidDatastore,
-	licenseKey string,
+	androidServiceCredentials string,
 	serverPrivateKey string,
 	fleetDS fleet.Datastore,
 	newActivity fleet.NewActivityFunc,
 	androidAgentConfig config.AndroidAgentConfig,
 ) (android.Service, error) {
-	client := newAMAPIClient(ctx, logger, licenseKey)
+	client := newAMAPIClient(ctx, logger, androidServiceCredentials)
 	return NewServiceWithClient(logger, ds, client, serverPrivateKey, fleetDS, newActivity, androidAgentConfig)
 }
 
@@ -79,6 +79,9 @@ func NewServiceWithClient(
 	newActivity fleet.NewActivityFunc,
 	androidAgentConfig config.AndroidAgentConfig,
 ) (android.Service, error) {
+	if client == nil {
+		return nil, errors.New("android Management API client is not configured")
+	}
 	authorizer, err := authz.NewAuthorizer()
 	if err != nil {
 		return nil, fmt.Errorf("new authorizer: %w", err)
@@ -109,15 +112,16 @@ func NewServiceWithClient(
 	return svc, nil
 }
 
-func newAMAPIClient(ctx context.Context, logger *slog.Logger, licenseKey string) androidmgmt.Client {
-	var client androidmgmt.Client
-	getEnv := dev_mode.Env
-	if getEnv("FLEET_DEV_ANDROID_GOOGLE_CLIENT") == "1" || strings.ToUpper(getEnv("FLEET_DEV_ANDROID_GOOGLE_CLIENT")) == "ON" {
-		client = androidmgmt.NewGoogleClient(ctx, logger, getEnv)
-	} else {
-		client = androidmgmt.NewProxyClient(ctx, logger, licenseKey, getEnv)
+func newAMAPIClient(ctx context.Context, logger *slog.Logger, androidServiceCredentials string) androidmgmt.Client {
+	getEnv := func(name string) string {
+		if name == "FLEET_DEV_ANDROID_GOOGLE_SERVICE_CREDENTIALS" {
+			if androidServiceCredentials != "" {
+				return androidServiceCredentials
+			}
+		}
+		return dev_mode.Env(name)
 	}
-	return client
+	return androidmgmt.NewGoogleClient(ctx, logger, getEnv)
 }
 
 func newErrResponse(err error) android.DefaultResponse {

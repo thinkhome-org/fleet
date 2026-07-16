@@ -16650,7 +16650,7 @@ func (s *integrationEnterpriseTestSuite) TestAutofillPoliciesAuthTeamUser() {
 							w.WriteHeader(http.StatusBadRequest)
 							return
 						}
-						_, _ = w.Write([]byte(`{"risks":"description", "whatWillProbablyHappenDuringMaintenance":"resolution"}`))
+						_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"{\"risks\":\"description\",\"whatWillProbablyHappenDuringMaintenance\":\"resolution\"}"}}]}`))
 					default:
 						w.WriteHeader(http.StatusNotFound)
 					}

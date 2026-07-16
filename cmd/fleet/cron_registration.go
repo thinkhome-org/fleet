@@ -80,8 +80,8 @@ func startCronSchedules(ctx context.Context, deps cronSchedulesDeps) {
 
 // registerCleanupAndMaintenanceCrons covers chart data collection, cron_stats
 // cleanup, software migrations, frequent cleanups, the cleanups-then-aggregation
-// schedule, query results cleanup, upcoming activities maintenance, usage
-// statistics, and batch activities.
+// schedule, query results cleanup, upcoming activities maintenance, and batch
+// activities.
 func registerCleanupAndMaintenanceCrons(ctx context.Context, deps cronSchedulesDeps) {
 	if os.Getenv("FLEET_SKIP_CHART_DATA_COLLECTION") == "" {
 		deps.register("failed to register chart_data_collection schedule", func() (fleet.CronSchedule, error) {
@@ -146,10 +146,6 @@ func registerCleanupAndMaintenanceCrons(ctx context.Context, deps cronSchedulesD
 
 	deps.register("failed to register upcoming_activities_maintenance schedule", func() (fleet.CronSchedule, error) {
 		return newUpcomingActivitiesSchedule(ctx, deps.instanceID, deps.ds, deps.logger)
-	})
-
-	deps.register("failed to register stats schedule", func() (fleet.CronSchedule, error) {
-		return newUsageStatisticsSchedule(ctx, deps.instanceID, deps.ds, *deps.config, deps.logger)
 	})
 
 	deps.register("failed to register batch activities schedule", func() (fleet.CronSchedule, error) {
