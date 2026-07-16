@@ -10,6 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends musl-tools && r
 WORKDIR /src
 COPY . .
 COPY --from=frontend /src/assets /src/assets
+COPY --from=frontend /src/frontend/templates/react.tmpl /src/frontend/templates/react.tmpl
 RUN go run github.com/kevinburke/go-bindata/go-bindata -pkg=bindata -tags full -o=server/bindata/generated.go frontend/templates/ assets/... server/mail/templates
 ARG FLEET_VERSION=local
 ARG FLEET_REVISION=unknown
