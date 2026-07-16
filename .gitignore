@@ -136,3 +136,4 @@ custom-gcl
 
 # dibble (the seed slinger) — binary lives next to source
 tools/dibble/dibble
+secrets/
